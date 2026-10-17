@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: flash-sale-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: flash_sale_db
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d flash_sale_db']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flash-sale-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: flash-sale-redis
+    restart: always
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flash-sale-net
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flash-sale-api
+    restart: on-failure
+    environment:
+      PORT: 3000
+      HOST: 0.0.0.0
+      NODE_ENV: production
+      LOG_LEVEL: info
+      DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/flash_sale_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RESERVATION_TTL_SECONDS: 300
+      IDEMPOTENCY_TTL_SECONDS: 86400
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - flash-sale-net
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  flash-sale-net:
+    driver: bridge
